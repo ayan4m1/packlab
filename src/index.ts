@@ -9,8 +9,6 @@ import {
 try {
   const { name, version, description } = await getPackageInfo();
 
-  console.dir(getInstallDirectory());
-
   await program
     .name(name)
     .version(version)
