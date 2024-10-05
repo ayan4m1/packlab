@@ -3,6 +3,9 @@
     "declaration": true,
     "esModuleInterop": true,
     "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "outDir": "./lib"
   },
   "include": ["src/**/*.ts"],
