@@ -1,12 +1,13 @@
 import type { PackageJson } from '@npmcli/package-json';
 
-import { parse, stringify } from 'yaml';
-import { satisfies, validRange } from 'semver';
 import { fileURLToPath } from 'url';
-import { readFile, writeFile } from 'fs/promises';
-import { dirname, resolve } from 'path';
+import { basename, dirname, resolve } from 'path';
+import { parse, stringify } from 'yaml';
 import { PathLike, existsSync } from 'fs';
+import { satisfies, valid, validRange } from 'semver';
+import { readFile, writeFile } from 'fs/promises';
 import packageJsonModule from '@npmcli/package-json';
+import { confirm } from '@inquirer/prompts';
 
 export enum ModSources {
   Modrinth = 'modrinth',
@@ -22,6 +23,12 @@ export enum ModLoaders {
 export enum MinecraftVersionType {
   Snapshot = 'snapshot',
   Release = 'release'
+}
+
+export enum VersionResolutionType {
+  Manual = 'manual',
+  Latest = 'latest',
+  Interactive = 'interactive'
 }
 
 export type MinecraftVersion = {
@@ -100,8 +107,14 @@ export const writePackFile = async (
 ): Promise<void> => {
   const path = getPackFilePath(dir);
 
-  if (existsSync(path)) {
-    console.warn(`Asked to overwrite packlab.yml in ${dir}`);
+  if (
+    existsSync(path) &&
+    !confirm({
+      message: `${basename(path)} already exists, overwrite it?`,
+      default: false
+    })
+  ) {
+    console.warn(`Unwilling to overwrite ${path}`);
     return;
   }
 
@@ -134,3 +147,20 @@ export const findMatchingVersions = (
   expression: string,
   versions: VersionSpecifier[]
 ) => versions.filter(({ version }) => satisfies(version, expression));
+
+export const findValidVersions = (versions: MinecraftVersions) =>
+  versions.versions.filter(({ id }) => valid(id)).map(({ id }) => id);
+
+export const getMinecraftVersionData = async () => {
+  try {
+    console.log('Fetching Minecraft version manifest from Mojang...');
+    const versionReq = await fetch(
+      'https://launchermeta.mojang.com/mc/game/version_manifest.json'
+    );
+
+    return (await versionReq.json()) as unknown as MinecraftVersions;
+  } catch (error) {
+    console.error('Failed to fetch Minecraft version manifest!');
+    throw error;
+  }
+};

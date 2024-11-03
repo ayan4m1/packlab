@@ -1,16 +1,17 @@
 import { valid } from 'semver';
 import { basename } from 'path';
 import { existsSync } from 'fs';
-import { input, checkbox } from '@inquirer/prompts';
+import { input, checkbox, select } from '@inquirer/prompts';
 
 import {
   getPackFilePath,
   ModLoaders,
   ModSources,
   PackFile,
-  MinecraftVersions,
   writePackFile,
-  MinecraftVersionType
+  getMinecraftVersionData,
+  VersionResolutionType,
+  findValidVersions
 } from '../utils.js';
 
 try {
@@ -18,7 +19,7 @@ try {
     console.error(
       'A packlab.yml already exists in this directory. Please ensure you are in the right place.'
     );
-    process.exit(0);
+    process.exit(1);
   }
 
   const dirName = basename(process.cwd());
@@ -37,22 +38,13 @@ try {
     message: 'Enter a URL, if available.'
   });
 
-  const versionReq = await fetch(
-    'https://launchermeta.mojang.com/mc/game/version_manifest.json'
-  );
-  const versionData = (await versionReq.json()) as unknown as MinecraftVersions;
+  const versionData = await getMinecraftVersionData();
+  const versions = findValidVersions(versionData);
 
-  const versions = versionData.versions
-    .filter(
-      (version) =>
-        version.type === MinecraftVersionType.Release && valid(version.id)
-    )
-    .map((version) => version.id);
-
-  let supportedVersions = [];
+  let supportedVersions: string[] = [];
 
   while (!supportedVersions.length) {
-    supportedVersions = await checkbox<string>({
+    supportedVersions = await checkbox({
       message: 'Which game versions should be supported?',
       choices: versions
     });
@@ -62,10 +54,10 @@ try {
     }
   }
 
-  let sources = [];
+  let sources: string[] = [];
 
   while (!sources.length) {
-    sources = await checkbox<string>({
+    sources = await checkbox({
       message: 'Which mod sources should be used?',
       choices: Object.values(ModSources).map((sourceName: string) => ({
         name: sourceName,
@@ -79,16 +71,60 @@ try {
     }
   }
 
-  let loaders = [];
+  let loaders: string[] = [];
+  const loaderVersions: Map<string, string> = new Map();
 
   while (!loaders.length) {
-    loaders = await checkbox<string>({
+    loaders = await checkbox({
       message: 'Which mod loaders should be supported?',
       choices: Object.values(ModLoaders)
     });
 
     if (!loaders.length) {
       console.warn('Must select at least one mod loader!');
+    }
+
+    for (const loader of loaders) {
+      const resolutionType = await select({
+        message: `How would you like to provide the version of ${loader} to use?`,
+        choices: [
+          {
+            value: VersionResolutionType.Manual,
+            description: 'Manual entry'
+          },
+          {
+            value: VersionResolutionType.Latest,
+            description: 'Use latest for each game version'
+          },
+          {
+            value: VersionResolutionType.Interactive,
+            description: 'Browse loader versions for each game version'
+          }
+        ]
+      });
+
+      switch (resolutionType) {
+        case VersionResolutionType.Manual:
+          for (const supportedVersion of supportedVersions) {
+            let version: string = '';
+
+            while (!valid(version)) {
+              version = await input({
+                message: `Enter the version of ${loader} to use for Minecraft ${supportedVersion}`,
+                required: true
+              });
+            }
+
+            loaderVersions.set(loader, version);
+          }
+          break;
+        case VersionResolutionType.Latest:
+          // todo: look up list
+          break;
+        case VersionResolutionType.Interactive:
+          // todo: look up list
+          break;
+      }
     }
   }
 
